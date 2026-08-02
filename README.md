@@ -67,6 +67,17 @@
   color in the daily chart, alongside session and token counts — never merged into
   your Claude total.
 
+- 💳 **Subscription vs. API, and a plan diagnosis**
+
+  Register the plans you actually pay for (Claude / ChatGPT / Cursor) and Tokfuel puts
+  your monthly subscription next to what the same usage would have cost on the API,
+  so you can see how many times over the plan is paying for itself. The amounts on
+  screen are already token counts priced against the API rate card — the only missing
+  side was what you actually pay. The **診断 (Diagnose)** button reports how you are
+  billed today, what this pace costs per month and per year, and the cheapest plan
+  per vendor plus the cheapest overall combination. Preset prices are list prices;
+  use *custom* to enter what you are really charged.
+
 - 🚨 **Budgets**
 
   Independent monthly and daily limits.
