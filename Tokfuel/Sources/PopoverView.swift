@@ -933,7 +933,9 @@ struct AdviceRow: View {
             Button {
                 copyPrompt()
             } label: {
-                Label(didCopy ? "コピーしました" : "プロンプトをコピー",
+                // 「プロンプトをコピー」だとヒント本文の複製と読めるので、
+                // 何のためのプロンプトなのかをラベルで言い切る。
+                Label(didCopy ? "コピーしました" : "改善プロンプトをコピー",
                       systemImage: didCopy ? "checkmark" : "doc.on.doc")
                     .font(.caption2)
             }
@@ -941,8 +943,8 @@ struct AdviceRow: View {
             // Color.accentColor はシステムの青を返し、ポップオーバー根の .tint(.orange) を
             // 無視する。ShapeStyle の .tint なら他のボタンと同じ色で揃う。
             .foregroundStyle(didCopy ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
-            .help("この指摘を Claude に相談するための文面をコピーします")
-            .accessibilityLabel("プロンプトをコピー")
+            .help("この指摘をどう直すかを Claude に相談するための文面をコピーします")
+            .accessibilityLabel("改善プロンプトをコピー")
         }
     }
 
