@@ -2,10 +2,11 @@ import Foundation
 
 /// `~/Library/Application Support/Tokfuel` — アプリの永続データ置き場。
 /// トランスクリプトキャッシュとイベントログが共有する（改名時に二重管理しないため）。
+/// 開発用バンドルは `Tokfuel Dev` を使い、普段使いのデータに混ざらないようにする。
 enum AppSupport {
     static var directory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Tokfuel", isDirectory: true)
+            .appendingPathComponent(BuildVariant.appSupportDirectoryName, isDirectory: true)
     }
 }
 
