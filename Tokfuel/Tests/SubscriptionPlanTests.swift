@@ -58,6 +58,45 @@ struct SubscriptionPlanTests {
         }
     }
 
+    // MARK: - 未回答と「契約していない」の区別
+
+    @Test func 既定は未回答であって契約なしと答えたわけではない() {
+        // どちらも月額 0 なので、金額だけでは区別できない。
+        withSettings { settings in
+            #expect(settings.hasAnsweredSubscription == false)
+            #expect(PlanVendor.allCases.allSatisfy { !settings.hasAnsweredPlan(for: $0) })
+        }
+    }
+
+    @Test func 契約していないと答えると回答済みになる() {
+        withSettings { settings in
+            settings.declareNoSubscription()
+            #expect(settings.hasAnsweredSubscription)
+            #expect(settings.subscriptionMonthlyTotal == 0)
+            #expect(settings.hasAnySubscription == false)
+        }
+    }
+
+    @Test func 契約していないと答えた記録はソースを広げても残る() {
+        // 表示中のソースぶんだけ書くと、あとで Cursor を含めた瞬間にまた問われてしまう。
+        withSettings { settings in
+            settings.costSourceMode = .claudeOnly
+            settings.declareNoSubscription()
+            settings.costSourceMode = .combined
+            #expect(settings.hasAnsweredSubscription)
+        }
+    }
+
+    @Test func プランを選んでも回答済みになる() {
+        withSettings { settings in
+            settings.costSourceMode = .claudeOnly
+            settings.setPlan(SubscriptionPlan.plan(id: "claude.pro", vendor: .claude), for: .claude)
+            #expect(settings.hasAnsweredPlan(for: .claude))
+            #expect(settings.hasAnsweredSubscription)
+            #expect(settings.hasAnySubscription)
+        }
+    }
+
     @Test func プリセットを選ぶと月額はカタログの値になる() {
         withSettings { settings in
             settings.setPlan(SubscriptionPlan.plan(id: "claude.max20", vendor: .claude),
