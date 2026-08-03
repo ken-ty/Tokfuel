@@ -38,8 +38,9 @@ enum PlanDiagnosis {
         var vendors: [VendorInput] = []
         /// 月換算の元になった実績の日数（表示中の期間の経過日数）。
         var windowDays: Int = 0
-        /// 月換算の元になった期間の名前（「今月」など）。文面にそのまま出す。
-        var windowLabel: String = ""
+        /// 月換算の元になった期間。ラベルも「もっと長い期間を勧めるか」もここから出す
+        /// ——文字列で持つと、日数と期間名の出どころが割れて矛盾した文が出る。
+        var windowPeriod: ReportPeriod = .thisMonth
     }
 
     // MARK: - 出力
@@ -91,7 +92,14 @@ enum PlanDiagnosis {
     struct Result: Equatable, Sendable {
         let vendors: [VendorResult]
         let windowDays: Int
-        let windowLabel: String
+        let windowPeriod: ReportPeriod
+
+        /// 文面に出す期間名。
+        var windowLabel: String { windowPeriod.label }
+
+        /// より長い期間へ広げる余地があるか。すでに「今月」「今年」を見ている人に
+        /// 「今月にすると安定します」と言わないための判定。
+        var canWidenWindow: Bool { windowPeriod == .today || windowPeriod == .thisWeek }
 
         /// いまの構成の実効月額の合計。
         var currentMonthlyTotal: Double { vendors.reduce(0) { $0 + $1.currentEffectiveUSD } }
@@ -109,9 +117,17 @@ enum PlanDiagnosis {
         /// 判定できる材料が 1 つも無い（表示中のソースにベンダーがいない）。
         var isEmpty: Bool { vendors.isEmpty }
 
-        /// いまの使い方が定額中心か従量中心か。
-        var isSubscriptionCentric: Bool {
+        /// 定額を 1 つでも契約しているか。
+        var hasSubscription: Bool {
             vendors.contains { !$0.currentPlan.isNone }
+        }
+
+        /// 支出の重心が定額側にあるか。契約の有無ではなく金額で見る——月 $20 の契約と
+        /// 月 $1,000 の従量利用がある構成を「定額中心」と言い切らないため。
+        var isSubscriptionCentric: Bool {
+            let payAsYouGo = vendors.filter { $0.currentPlan.isNone }
+                .reduce(0) { $0 + $1.currentEffectiveUSD }
+            return subscriptionMonthlyTotal > payAsYouGo
         }
 
         /// API 換算が一番大きいベンダー（＝どこを削るのが効くか）。
@@ -124,7 +140,7 @@ enum PlanDiagnosis {
         var summary: String {
             guard !isEmpty else { return "比較できる実績も契約もまだありません。" }
             if savingUSD <= 0 {
-                return isSubscriptionCentric
+                return hasSubscription
                     ? "いまの契約がこの使い方に対して最安です。"
                     : "API 従量のままがこの使い方に対して最安です。"
             }
@@ -141,7 +157,7 @@ enum PlanDiagnosis {
     static func diagnose(_ input: Input) -> Result {
         Result(vendors: input.vendors.map(verdict(for:)),
                windowDays: input.windowDays,
-               windowLabel: input.windowLabel)
+               windowPeriod: input.windowPeriod)
     }
 
     static func verdict(for input: VendorInput) -> VendorResult {
@@ -185,14 +201,19 @@ enum PlanDiagnosis {
             // 推奨が定額なら、その実効月額（＝プラン月額）で吸収できるかを見る。カスタム枠が
             // 残った場合もここで拾えるよう、カタログの月額ではなく実効額で判定する。
             mayHitRateLimit: !recommended.isNone
+                && recommendedEffective > 0
                 && input.monthlyAPIEquivalentUSD > recommendedEffective * coverageMultiple)
     }
 
     /// 実効月額。契約していれば月額、していなければ API 換算そのもの。
+    ///
+    /// 月額 0 の契約は「契約なし」と同じに扱う。カスタム枠を選んで金額を入れていない状態が
+    /// これに当たり、固定費 0 の契約として通すと常に最安になって推奨を乗っ取ってしまう
+    /// （さらに上限判定の分母が 0 になり、倍率の文言が桁違いの数字になる）。
     static func effectiveMonthly(plan: SubscriptionPlan,
                                  monthlyUSD: Double,
                                  apiEquivalentUSD: Double) -> Double {
-        plan.isNone ? apiEquivalentUSD : monthlyUSD
+        plan.isNone || monthlyUSD <= 0 ? apiEquivalentUSD : monthlyUSD
     }
 
     /// この使用量をプランが吸収できそうか。従量には上限が無いので常に true。

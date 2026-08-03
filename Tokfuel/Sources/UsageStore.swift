@@ -51,6 +51,11 @@ final class UsageStore: ObservableObject {
             }
         }
     }
+    /// いま持っている `report` を作った期間。`reportPeriod` は切り替えた瞬間に変わるが
+    /// `report` は再解析が終わるまで前のままなので、診断の文面はこちらを見る
+    /// （でないと「今週の実績（30 日）」のような矛盾した文が出る）。
+    @Published private(set) var reportedPeriod: ReportPeriod?
+
     /// 推移チャートの描画形式（日別バー / 累積折れ線）。純粋な表示切替なので再解析はしない。
     @Published var costChartStyle: CostChartStyle {
         didSet {
@@ -377,6 +382,7 @@ final class UsageStore: ObservableObject {
             lang: lang, projectsPath: cacheKeyPath
         ) {
             report = cached
+            reportedPeriod = period
         }
         let from = window.start
         let to = Self.dateString(Date())
@@ -393,6 +399,7 @@ final class UsageStore: ObservableObject {
                 let r = try await retokTask
                 guard !Task.isCancelled, generation == self.reportGeneration else { return }
                 self.report = r
+                self.reportedPeriod = period
                 ReportCache.shared.save(
                     r, period: period, weekStart: weekStart, days: days,
                     lang: lang, projectsPath: cacheKeyPath)
@@ -865,8 +872,9 @@ extension UsageStore {
         // 使ってもいないし契約もしていないベンダーは載せない（$0 対 $0 の行が並ぶだけで、
         // 判断の材料にならない）。
         .filter { $0.monthlyAPIEquivalentUSD > 0 || $0.currentMonthlyUSD > 0 }
+        // 日数も期間名も、いま持っている report ひとつから出す。
         return PlanDiagnosis.Input(vendors: vendors, windowDays: days,
-                                   windowLabel: reportPeriod.label)
+                                   windowPeriod: reportedPeriod ?? reportPeriod)
     }
 
     /// 「モデル別」セクション用の行。ソースフィルタと内訳モードに従う。

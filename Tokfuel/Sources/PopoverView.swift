@@ -67,6 +67,11 @@ struct PopoverView: View {
             footerBar
         }
         .frame(width: 360, height: 520)
+        // .sheet と違い .overlay は下層をビュー階層に残す。診断を開いている間は本体の
+        // 当たり判定と読み上げを止めないと、見えていないボタンに Tab フォーカスが移り、
+        // VoiceOver も下層を読んでしまう（順序は .overlay より前でなければならない）。
+        .allowsHitTesting(!showsDiagnosis)
+        .accessibilityHidden(showsDiagnosis)
         .overlay {
             if showsDiagnosis {
                 PlanDiagnosisView(
@@ -77,6 +82,7 @@ struct PopoverView: View {
                         onOpenSettings()
                     })
                 .transition(.opacity)
+                .onExitCommand { withAnimation(.easeInOut(duration: 0.15)) { showsDiagnosis = false } }
             }
         }
         .onAppear {

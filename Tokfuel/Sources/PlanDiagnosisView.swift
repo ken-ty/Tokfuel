@@ -55,7 +55,10 @@ struct PlanDiagnosisView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if result.isShortWindow {
-                Label("実績が \(result.windowDays) 日ぶんしかありません。推移の期間を「今月」にすると判定が安定します。",
+                // すでに「今月」以上を見ている人に期間の変更を勧めても、変える先が無い。
+                Label(result.canWidenWindow
+                      ? "実績が \(result.windowDays) 日ぶんしかありません。推移の期間を「今月」にすると判定が安定します。"
+                      : "実績が \(result.windowDays) 日ぶんしかありません。日数がたつと判定が安定します。",
                       systemImage: "info.circle")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
