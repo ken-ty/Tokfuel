@@ -94,6 +94,11 @@ CI（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）が、すべての
 - **`implementation`**：Issue 番号を起点に実装して出荷する（Issue 本文が仕様）。
 - **`task-select`**：オープンな Issue を見渡し、次に実装する項目を選ぶ。
 
+サイクルの外側では、次のスキルが PR のレビューを扱う。
+
+- **`coderabbit`**：PR に付いた CodeRabbit の指摘を集め、実コードで再現を確かめてから直す。
+  再現しなかったものは理由を添えて見送る。
+
 ## 作業言語
 
 このリポジトリの基本言語は日本語。
