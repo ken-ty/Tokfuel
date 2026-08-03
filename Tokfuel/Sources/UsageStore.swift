@@ -51,6 +51,11 @@ final class UsageStore: ObservableObject {
             }
         }
     }
+    /// いま持っている `report` を作った期間。`reportPeriod` は切り替えた瞬間に変わるが
+    /// `report` は再解析が終わるまで前のままなので、診断の文面はこちらを見る
+    /// （でないと「今週の実績（30 日）」のような矛盾した文が出る）。
+    @Published private(set) var reportedPeriod: ReportPeriod?
+
     /// 推移チャートの描画形式（日別バー / 累積折れ線）。純粋な表示切替なので再解析はしない。
     @Published var costChartStyle: CostChartStyle {
         didSet {
@@ -377,6 +382,7 @@ final class UsageStore: ObservableObject {
             lang: lang, projectsPath: cacheKeyPath
         ) {
             report = cached
+            reportedPeriod = period
         }
         let from = window.start
         let to = Self.dateString(Date())
@@ -393,6 +399,7 @@ final class UsageStore: ObservableObject {
                 let r = try await retokTask
                 guard !Task.isCancelled, generation == self.reportGeneration else { return }
                 self.report = r
+                self.reportedPeriod = period
                 ReportCache.shared.save(
                     r, period: period, weekStart: weekStart, days: days,
                     lang: lang, projectsPath: cacheKeyPath)
@@ -826,6 +833,12 @@ extension UsageStore {
     /// 期間合計（チャート下のキャプション用）。ソース表示モードに従う。
     /// Claude / 二次ソースとも表示窓に絞る（retok の余剰日や予算窓の補完分を数えない）。
     func periodTotalCost(for report: RetokReport) -> Double {
+        Self.displayedSpend(bySource: periodCostBySource(for: report),
+                            mode: settings.costSourceMode)
+    }
+
+    /// 表示窓のコストをソース id 別に返す（`periodTotalCost` が合成する前の内訳）。
+    func periodCostBySource(for report: RetokReport) -> [String: Double] {
         let from = Self.reportWindowStart(days: report.periodDays)
         var bySource = [
             CostSourceMode.claudeSourceID: report.daily
@@ -835,7 +848,33 @@ extension UsageStore {
         for (id, byDate) in driverDailyByID {
             bySource[id] = byDate.filter { $0.key >= from }.values.reduce(0, +)
         }
-        return Self.displayedSpend(bySource: bySource, mode: settings.costSourceMode)
+        return bySource
+    }
+
+    // MARK: - サブスクとの比較
+
+    /// 「サブスク vs API 換算」と診断の入力。
+    ///
+    /// 月換算の元は予算窓（32 日集計）ではなく**表示中の期間**にする。予算窓は予算を
+    /// 設定した人にしか回らない（`reloadBudget` が早期 return する）ので、そちらを土台に
+    /// すると予算オフの人には常に $0 が出てしまう。表示中の期間なら必ず載っている。
+    func planDiagnosisInput(for report: RetokReport) -> PlanDiagnosis.Input {
+        let bySource = periodCostBySource(for: report)
+        let days = max(report.periodDays, 1)
+        let vendors = settings.comparablePlanVendors.map { vendor in
+            PlanDiagnosis.VendorInput(
+                vendor: vendor,
+                monthlyAPIEquivalentUSD: PlanDiagnosis.monthlyEquivalent(
+                    spend: bySource[vendor.sourceID] ?? 0, windowDays: days),
+                currentPlan: settings.plan(for: vendor),
+                currentMonthlyUSD: settings.monthlyPlanCost(for: vendor))
+        }
+        // 使ってもいないし契約もしていないベンダーは載せない（$0 対 $0 の行が並ぶだけで、
+        // 判断の材料にならない）。
+        .filter { $0.monthlyAPIEquivalentUSD > 0 || $0.currentMonthlyUSD > 0 }
+        // 日数も期間名も、いま持っている report ひとつから出す。
+        return PlanDiagnosis.Input(vendors: vendors, windowDays: days,
+                                   windowPeriod: reportedPeriod ?? reportPeriod)
     }
 
     /// 「モデル別」セクション用の行。ソースフィルタと内訳モードに従う。

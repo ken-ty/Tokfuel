@@ -47,6 +47,7 @@ struct SettingsView: View {
             generalSection
             menuBarSection
             budgetSection
+            subscriptionSection
             privacySection
             advancedSection
             #if DEBUG
@@ -169,6 +170,69 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// 契約中のプラン。ここで登録した月額だけが、ポップオーバーの「サブスク」と診断の
+    /// 比較対象になる（使用量の側は元から API 価格で計算されている）。
+    private var subscriptionSection: some View {
+        Section {
+            ForEach(PlanVendor.allCases) { vendor in
+                Picker(vendor.label, selection: planSelection(for: vendor)) {
+                    ForEach(SubscriptionPlan.options(for: vendor)) { plan in
+                        Text(planLabel(plan)).tag(plan.id)
+                    }
+                }
+                if settings.plan(for: vendor).isCustom {
+                    HStack {
+                        Text("　月額 (\(unitSymbol))")
+                        Spacer()
+                        TextField("", value: customPlanField(for: vendor), format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .multilineTextAlignment(.trailing)
+                            // 隣の Text は別要素なので、これが無いと VoiceOver は
+                            // どのベンダーの月額欄なのかを読めない。
+                            .accessibilityLabel("\(vendor.label) の月額 (\(unitSymbol))")
+                    }
+                }
+            }
+        } header: {
+            Text("サブスク")
+        } footer: {
+            Text("プリセットの月額は \(SubscriptionPlan.priceAsOf) 時点の公称価格です。値上げ・年払い・法人契約・為替で実額が違うときは「カスタム」に実際の月額を入れてください。ポップオーバーの「サブスク」と「診断」がここの値と API 換算コストを比べます。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// プランのピッカーに出すラベル。プリセットだけ月額を添える
+    /// （契約なし・カスタムは金額が決まらないので付けない）。
+    private func planLabel(_ plan: SubscriptionPlan) -> String {
+        plan.isPreset ? "\(plan.name)（\(Money.format(plan.monthlyUSD))/月）" : plan.name
+    }
+
+    /// プラン選択のバインディング。`AppSettings` は辞書で持つので id を出し入れする。
+    private func planSelection(for vendor: PlanVendor) -> Binding<String> {
+        Binding(get: { settings.plan(for: vendor).id },
+                set: { settings.setPlan(SubscriptionPlan.plan(id: $0, vendor: vendor),
+                                        for: vendor) })
+    }
+
+    /// カスタム月額（内部保存は USD）を、選択中の通貨で入出力するバインディング。
+    private func customPlanField(for vendor: PlanVendor) -> Binding<Double> {
+        Binding(
+            get: {
+                Money.displayAmount(forUSD: settings.customMonthly(for: vendor),
+                                    currency: settings.displayCurrency,
+                                    rate: Money.currentRate())
+            },
+            set: { value in
+                settings.setCustomMonthly(
+                    Money.usdAmount(fromDisplayAmount: value,
+                                    currency: settings.displayCurrency,
+                                    rate: Money.currentRate()),
+                    for: vendor)
+            })
     }
 
     private func budgetLimitRow(

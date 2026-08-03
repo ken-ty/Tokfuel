@@ -133,6 +133,12 @@ enum ScreenshotRenderer {
     ///   最初の 1 画面に入らないため、ここでしか見えない）
     /// - `settings` / `settings-advanced` / `settings-debug`: 設定ウィンドウ（既定・詳細を開いた状態・
     ///   デバッグを開いた状態）
+    /// - `popover-subscription-unset`: サブスクにまだ答えていない状態。登録と「契約していない」の
+    ///   2 つの道を出す
+    /// - `popover-no-subscription`: 「定額は契約していない」と答えた状態。比較の相手が無くても
+    ///   API 従量の見込み額を出す（未回答のときの登録導線とは別の絵）
+    /// - `plan-diagnosis`: ポップオーバーの上に「診断」を開いた状態（サブスクと API 換算の
+    ///   比較・推奨構成）
     /// - `about`: 「Tokfuel について」ウィンドウ
     /// - `budget-alert`: 予算アラートのウィンドウ（TF #81。ライブな `UsageStore` は通さず、
     ///   `budgetAlertContent` のフィクスチャだけを描く）
@@ -166,6 +172,15 @@ enum ScreenshotRenderer {
             ("settings-debug", try renderStandalone(
                 SettingsView(store: store, initiallyShowsAdvanced: true, initiallyShowsDebug: true),
                 probeSize: settingsSize, scrollsToBottom: true)),
+            ("popover-subscription-unset", try renderStandalone(
+                PopoverView(store: store, settings: subscriptionFixtureSettings(answered: false)),
+                probeSize: popoverSize)),
+            ("popover-no-subscription", try renderStandalone(
+                PopoverView(store: store, settings: subscriptionFixtureSettings(answered: true)),
+                probeSize: popoverSize)),
+            ("plan-diagnosis", try renderStandalone(
+                PopoverView(store: store, initiallyShowsDiagnosis: true),
+                probeSize: popoverSize)),
             ("about", try renderStandalone(AboutView(), probeSize: aboutProbeSize)),
             ("budget-alert", try renderStandalone(BudgetAlertView(content: budgetAlertContent),
                                                   probeSize: alertProbeSize)),
@@ -298,7 +313,12 @@ enum ScreenshotRenderer {
         defaults.set(reportPeriod.rawValue, forKey: UsageStore.reportPeriodKey)
         defaults.set(CostChartStyle.daily.rawValue, forKey: UsageStore.costChartStyleKey)
 
-        let settings = AppSettings.shared
+        applyFixtureSettings(AppSettings.shared)
+    }
+
+    /// 撮影用の設定値。`AppSettings.shared` にも、画面ごとの差し替え用に作った
+    /// 使い捨てインスタンスにも同じものを積めるよう、値の定義はここ 1 箇所に置く。
+    private static func applyFixtureSettings(_ settings: AppSettings, registersPlans: Bool = true) {
         settings.budgetLimit = budgetLimit
         settings.dailyBudgetLimit = dailyBudgetLimit
         settings.budgetWarnPercent = 80
@@ -306,9 +326,28 @@ enum ScreenshotRenderer {
         settings.budgetAlertStyle = .notification
         // 並べて表示にして、TF-0032 の Cursor 二次ソースをヒーローに写す。
         settings.costSourceMode = .sideBySide
+        // 契約中のプランを積んで、「サブスク」セクションを比較が出た状態で写す
+        // （未登録だと登録への導線しか出ず、この機能の絵にならない）。
+        if registersPlans {
+            settings.setPlan(SubscriptionPlan.plan(id: "claude.max20", vendor: .claude), for: .claude)
+            settings.setPlan(SubscriptionPlan.plan(id: "cursor.pro", vendor: .cursor), for: .cursor)
+        }
         // 追従モードのトグル（TF-0080）。実行環境の UserDefaults に依らず既定オンの絵にする。
         settings.adaptiveRefreshEnabled = true
         settings.activityAnimationEnabled = true
+    }
+
+    /// サブスクの回答状態だけを差し替えた設定。実ユーザーの UserDefaults を汚さないよう、
+    /// 使い捨てのスイートに載せて撮影のあいだだけ使う。
+    /// - Parameter answered: true なら「どこにも契約していない」と答えた状態、false なら未回答。
+    static func subscriptionFixtureSettings(answered: Bool) -> AppSettings {
+        let name = "tokfuel-screenshot-subscription-\(answered ? "none" : "unset")"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        let settings = AppSettings(defaults: defaults, codexInstalled: true)
+        applyFixtureSettings(settings, registersPlans: false)
+        if answered { settings.declareNoSubscription() }
+        return settings
     }
 
     // MARK: - 合成（デスクトップ風の枠）
