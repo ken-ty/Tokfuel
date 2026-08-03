@@ -58,6 +58,24 @@ struct SubscriptionPlanTests {
         }
     }
 
+    @Test func 保存したプランとカスタム月額は作り直しても残る() {
+        // UserDefaults への書き戻しが欠けても、同一インスタンスの検査だけでは気付けない。
+        let name = "tokfuel-tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+
+        let first = AppSettings(defaults: defaults, codexInstalled: true)
+        first.setPlan(SubscriptionPlan.plan(id: "claude.max5", vendor: .claude), for: .claude)
+        first.setPlan(SubscriptionPlan.custom(.cursor), for: .cursor)
+        first.setCustomMonthly(42, for: .cursor)
+
+        let reopened = AppSettings(defaults: defaults, codexInstalled: true)
+        #expect(reopened.plan(for: .claude).id == "claude.max5")
+        #expect(reopened.monthlyPlanCost(for: .claude) == 100)
+        #expect(reopened.plan(for: .cursor).isCustom)
+        #expect(reopened.monthlyPlanCost(for: .cursor) == 42)
+    }
+
     // MARK: - 未回答と「契約していない」の区別
 
     @Test func 既定は未回答であって契約なしと答えたわけではない() {

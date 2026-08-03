@@ -190,6 +190,9 @@ struct SettingsView: View {
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 100)
                             .multilineTextAlignment(.trailing)
+                            // 隣の Text は別要素なので、これが無いと VoiceOver は
+                            // どのベンダーの月額欄なのかを読めない。
+                            .accessibilityLabel("\(vendor.label) の月額 (\(unitSymbol))")
                     }
                 }
             }

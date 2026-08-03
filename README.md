@@ -71,12 +71,15 @@
 
   Register the plans you actually pay for (Claude / ChatGPT / Cursor) and Tokfuel puts
   your monthly subscription next to what the same usage would have cost on the API,
-  so you can see how many times over the plan is paying for itself. The amounts on
+  so you can see how much the plan saves you against paying per token. The amounts on
   screen are already token counts priced against the API rate card — the only missing
   side was what you actually pay. The **診断 (Diagnose)** button reports how you are
-  billed today, what this pace costs per month and per year, and the cheapest plan
-  per vendor plus the cheapest overall combination. Preset prices are list prices;
-  use *custom* to enter what you are really charged.
+  billed today, what this pace costs per month, what a year of the difference adds up
+  to, and the cheapest plan per vendor plus the cheapest overall combination. Preset
+  prices are list prices; use *custom* to enter what you are really charged. Both
+  sides are estimates: the API equivalent prices recorded token counts against the
+  rate card, and plan rate limits cannot be judged from cost alone — never read the
+  result as a billed amount. Not paying for any plan is a valid answer too.
 
 - 🚨 **Budgets**
 

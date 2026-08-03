@@ -61,7 +61,8 @@ struct PlanDiagnosisTests {
         let result = PlanDiagnosis.verdict(for: input(api: 12, plan: preset(.claude, "Pro")))
         #expect(result.recommended.isNone)
         #expect(result.savingUSD == 8)
-        #expect(result.headline == "API 従量に戻すと月 $8.00 減ります")
+        // Money.format は表示通貨の設定を読む。期待値も同じ関数で作り、環境に依存させない。
+        #expect(result.headline == "API 従量に戻すと月 \(Money.format(8)) 減ります")
     }
 
     @Test func 同額なら現状のプランを勝ち残らせる() {
@@ -99,6 +100,56 @@ struct PlanDiagnosisTests {
         #expect(result.mayHitRateLimit == false)
     }
 
+    // MARK: - 月額 0 のカスタム枠
+
+    @Test func 月額を入れていないカスタム枠は契約なしとして扱う() {
+        // 固定費 0 の契約として通すと常に最安になり、推奨を乗っ取ってしまう。
+        let result = PlanDiagnosis.verdict(
+            for: input(api: 143, plan: .custom(.claude), monthly: 0))
+        #expect(result.currentEffectiveUSD == 143)
+        #expect(result.recommended.isCustom == false || result.recommendedEffectiveUSD == 143)
+        #expect(result.savingUSD == 0 || result.recommendedEffectiveUSD < 143)
+    }
+
+    @Test func 月額0の推奨では上限の注意と倍率を出さない() {
+        // 分母が 0 のまま倍率を出すと「14300.0 倍」のような桁違いの文言になる。
+        let result = PlanDiagnosis.verdict(
+            for: input(api: 143, plan: .custom(.claude), monthly: 0))
+        #expect(result.mayHitRateLimit == false)
+        #expect(result.detail.contains("倍あります") == false)
+    }
+
+    // MARK: - 定額中心かどうか
+
+    @Test func 定額中心は契約の有無ではなく金額で決まる() {
+        // 月 $20 の契約と月 $1,000 の従量利用。契約はあるが重心は従量側にある。
+        let result = PlanDiagnosis.diagnose(PlanDiagnosis.Input(
+            vendors: [
+                input(vendor: .claude, api: 5, plan: preset(.claude, "Pro")),
+                input(vendor: .cursor, api: 1000, plan: .none(.cursor))
+            ],
+            windowDays: 30, windowPeriod: .thisMonth))
+        #expect(result.hasSubscription)
+        #expect(result.isSubscriptionCentric == false)
+    }
+
+    // MARK: - 期間
+
+    @Test func 今月以上を見ているときは期間の変更を勧めない() {
+        // 月初は「今月」を選んでいても windowDays が 7 未満になる。
+        let short = PlanDiagnosis.diagnose(PlanDiagnosis.Input(
+            vendors: [input(api: 100, plan: .none(.claude))],
+            windowDays: 3, windowPeriod: .thisMonth))
+        #expect(short.isShortWindow)
+        #expect(short.canWidenWindow == false)
+
+        let week = PlanDiagnosis.diagnose(PlanDiagnosis.Input(
+            vendors: [input(api: 100, plan: .none(.claude))],
+            windowDays: 3, windowPeriod: .thisWeek))
+        #expect(week.canWidenWindow)
+        #expect(week.windowLabel == "今週")
+    }
+
     // MARK: - 合計
 
     @Test func 合計は現状と推奨とすべて従量の三本を出す() {
@@ -107,7 +158,7 @@ struct PlanDiagnosisTests {
                 input(vendor: .claude, api: 1430, plan: preset(.claude, "Max 20x")),
                 input(vendor: .cursor, api: 8, plan: preset(.cursor, "Pro"))
             ],
-            windowDays: 30, windowLabel: "今月"))
+            windowDays: 30, windowPeriod: .thisMonth))
         // Claude は Max 20x のまま（$200）、Cursor は従量へ落として $8。
         #expect(result.currentMonthlyTotal == 220)
         #expect(result.recommendedMonthlyTotal == 208)
@@ -122,13 +173,13 @@ struct PlanDiagnosisTests {
     @Test func 削減が無いときの結論は現状肯定になる() {
         let subscribed = PlanDiagnosis.diagnose(PlanDiagnosis.Input(
             vendors: [input(api: 1430, plan: preset(.claude, "Max 20x"))],
-            windowDays: 30, windowLabel: "今月"))
+            windowDays: 30, windowPeriod: .thisMonth))
         #expect(subscribed.savingUSD == 0)
         #expect(subscribed.summary == "いまの契約がこの使い方に対して最安です。")
 
         let payAsYouGo = PlanDiagnosis.diagnose(PlanDiagnosis.Input(
             vendors: [input(api: 3, plan: .none(.claude))],
-            windowDays: 30, windowLabel: "今月"))
+            windowDays: 30, windowPeriod: .thisMonth))
         #expect(payAsYouGo.summary == "API 従量のままがこの使い方に対して最安です。")
         #expect(payAsYouGo.isSubscriptionCentric == false)
     }
@@ -142,9 +193,9 @@ struct PlanDiagnosisTests {
 
     @Test func 実績が七日未満なら短い窓として印を付ける() {
         #expect(PlanDiagnosis.diagnose(
-            PlanDiagnosis.Input(vendors: [], windowDays: 6, windowLabel: "今週")).isShortWindow)
+            PlanDiagnosis.Input(vendors: [], windowDays: 6, windowPeriod: .thisWeek)).isShortWindow)
         #expect(PlanDiagnosis.diagnose(
-            PlanDiagnosis.Input(vendors: [], windowDays: 7, windowLabel: "今週"))
+            PlanDiagnosis.Input(vendors: [], windowDays: 7, windowPeriod: .thisWeek))
             .isShortWindow == false)
     }
 
