@@ -315,6 +315,29 @@ final class AppSettings: ObservableObject {
     /// ポップオーバーは金額ではなく登録への導線を出す。
     var hasAnySubscription: Bool { subscriptionMonthlyTotal > 0 }
 
+    /// このベンダーについてユーザーが明示的に答えたか。
+    /// 未回答と「契約なしを選んだ」はどちらも月額 0 になるので、金額では区別できない。
+    func hasAnsweredPlan(for vendor: PlanVendor) -> Bool {
+        subscriptionPlanIDs[vendor.rawValue] != nil
+    }
+
+    /// 比較対象のベンダーすべてについて答えが入っているか。
+    /// 定額を 1 つも契約していない人にいつまでも登録を勧め続けないための判定
+    /// ——「まだ答えていない」と「契約していないと答えた」は別の状態として扱う。
+    var hasAnsweredSubscription: Bool {
+        comparablePlanVendors.allSatisfy { hasAnsweredPlan(for: $0) }
+    }
+
+    /// 「どこにも定額を契約していない」を記録する。
+    ///
+    /// 表示中のソースぶんだけでなく全ベンダーに書く——あとで「コストのソース」を広げたときに、
+    /// 一度答えたはずの問いがまた出てくるのを防ぐ。
+    func declareNoSubscription() {
+        for vendor in PlanVendor.allCases {
+            setPlan(SubscriptionPlan.none(vendor), for: vendor)
+        }
+    }
+
     /// 月側の集計に実際に使う期間。予算オフでメニューバー表示のためだけに数える場合は暦月。
     var effectiveBudgetPeriod: BudgetPeriod {
         budgetLimit > 0 ? budgetPeriod : .calendarMonth

@@ -226,16 +226,52 @@ struct PopoverView: View {
             }
             if settings.hasAnySubscription {
                 subscriptionComparison
+            } else if settings.hasAnsweredSubscription {
+                // 契約していないと答えた人。比較する相手は無いが、API 従量でいくら
+                // 払う見込みかは出せる——ここが空欄だと登録を促され続けたのと変わらない。
+                noSubscriptionReadout
             } else {
-                // 片側が無いと比較にならない。金額の代わりに登録の入口だけを出す。
-                Text("契約中のプランを登録すると、API 従量との差が出せます。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button("プランを登録…") { onOpenSettings() }
-                    .controlSize(.small)
+                subscriptionPrompt
             }
         }
+    }
+
+    /// まだ答えていない人への入口。定額を契約していない人もいるので、
+    /// 「登録する」と同じ重さで「契約していない」と答えられる道を並べて出す。
+    @ViewBuilder
+    private var subscriptionPrompt: some View {
+        Text("契約中のプランを登録すると、API 従量との差が出せます。")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 8) {
+            Button("プランを登録…") { onOpenSettings() }
+                .controlSize(.small)
+            Button("契約していない") {
+                UsageEventLog.shared.log(.settingChange, meta: ["key": "subscriptionPlanIDs"])
+                settings.declareNoSubscription()
+            }
+            .controlSize(.small)
+        }
+    }
+
+    /// 定額なしと答えた場合の表示。払う見込み額は API 換算そのものなので 1 行で足りる。
+    @ViewBuilder
+    private var noSubscriptionReadout: some View {
+        let apiEquivalent = diagnosisResult.apiOnlyMonthlyTotal
+        HStack {
+            Text("契約なし（API 従量）")
+                .font(.caption)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text(Self.money(apiEquivalent) + "/月")
+                .font(.caption.monospacedDigit())
+        }
+        Text("\(store.reportPeriod.label)の実績から月換算した見込み額です。"
+             + "定額に替えたほうが安いかは「診断」で確かめられます。")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// 定額 / API 換算 / 差の 3 行。
