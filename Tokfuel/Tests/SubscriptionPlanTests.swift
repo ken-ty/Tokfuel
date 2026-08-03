@@ -6,11 +6,13 @@ import Testing
 /// 触らないよう、テスト専用のスイート名で `UserDefaults` を作る。
 @MainActor
 struct SubscriptionPlanTests {
-    private func makeSettings() -> AppSettings {
+    /// 使い捨ての `UserDefaults` で `AppSettings` を組み、検査が終わったら必ず消す。
+    /// 消さないと `~/Library/Preferences` にテスト実行ぶんの plist が残り続ける。
+    private func withSettings(_ body: (AppSettings) -> Void) {
         let name = "tokfuel-tests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
-        defaults.removePersistentDomain(forName: name)
-        return AppSettings(defaults: defaults, codexInstalled: true)
+        defer { defaults.removePersistentDomain(forName: name) }
+        body(AppSettings(defaults: defaults, codexInstalled: true))
     }
 
     // MARK: - カタログ
@@ -49,41 +51,46 @@ struct SubscriptionPlanTests {
     // MARK: - 設定の出し入れ
 
     @Test func 既定はどのベンダーも契約なし() {
-        let settings = makeSettings()
-        #expect(PlanVendor.allCases.allSatisfy { settings.plan(for: $0).isNone })
-        #expect(settings.subscriptionMonthlyTotal == 0)
-        #expect(settings.hasAnySubscription == false)
+        withSettings { settings in
+            #expect(PlanVendor.allCases.allSatisfy { settings.plan(for: $0).isNone })
+            #expect(settings.subscriptionMonthlyTotal == 0)
+            #expect(settings.hasAnySubscription == false)
+        }
     }
 
     @Test func プリセットを選ぶと月額はカタログの値になる() {
-        let settings = makeSettings()
-        settings.setPlan(SubscriptionPlan.plan(id: "claude.max20", vendor: .claude), for: .claude)
-        #expect(settings.monthlyPlanCost(for: .claude) == 200)
-        #expect(settings.subscriptionMonthlyTotal == 200)
-        #expect(settings.hasAnySubscription)
+        withSettings { settings in
+            settings.setPlan(SubscriptionPlan.plan(id: "claude.max20", vendor: .claude),
+                             for: .claude)
+            #expect(settings.monthlyPlanCost(for: .claude) == 200)
+            #expect(settings.subscriptionMonthlyTotal == 200)
+            #expect(settings.hasAnySubscription)
+        }
     }
 
     @Test func カスタムは入力した月額を使い負値は受け付けない() {
-        let settings = makeSettings()
-        settings.setPlan(.custom(.cursor), for: .cursor)
-        settings.setCustomMonthly(35, for: .cursor)
-        #expect(settings.monthlyPlanCost(for: .cursor) == 35)
-        settings.setCustomMonthly(-10, for: .cursor)
-        #expect(settings.monthlyPlanCost(for: .cursor) == 0)
+        withSettings { settings in
+            settings.setPlan(.custom(.cursor), for: .cursor)
+            settings.setCustomMonthly(35, for: .cursor)
+            #expect(settings.monthlyPlanCost(for: .cursor) == 35)
+            settings.setCustomMonthly(-10, for: .cursor)
+            #expect(settings.monthlyPlanCost(for: .cursor) == 0)
+        }
     }
 
     @Test func 表示中のソースに含まれるベンダーだけを比較に載せる() {
-        let settings = makeSettings()
-        settings.setPlan(SubscriptionPlan.plan(id: "claude.pro", vendor: .claude), for: .claude)
-        settings.setPlan(SubscriptionPlan.plan(id: "cursor.pro", vendor: .cursor), for: .cursor)
+        withSettings { settings in
+            settings.setPlan(SubscriptionPlan.plan(id: "claude.pro", vendor: .claude), for: .claude)
+            settings.setPlan(SubscriptionPlan.plan(id: "cursor.pro", vendor: .cursor), for: .cursor)
 
-        settings.costSourceMode = .combined
-        #expect(settings.comparablePlanVendors.count == PlanVendor.allCases.count)
-        #expect(settings.subscriptionMonthlyTotal == 40)
+            settings.costSourceMode = .combined
+            #expect(settings.comparablePlanVendors.count == PlanVendor.allCases.count)
+            #expect(settings.subscriptionMonthlyTotal == 40)
 
-        // 「Claude のみ」では、見えていない Cursor の定額を合計に足さない。
-        settings.costSourceMode = .claudeOnly
-        #expect(settings.comparablePlanVendors == [.claude])
-        #expect(settings.subscriptionMonthlyTotal == 20)
+            // 「Claude のみ」では、見えていない Cursor の定額を合計に足さない。
+            settings.costSourceMode = .claudeOnly
+            #expect(settings.comparablePlanVendors == [.claude])
+            #expect(settings.subscriptionMonthlyTotal == 20)
+        }
     }
 }
