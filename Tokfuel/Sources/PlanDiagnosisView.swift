@@ -125,8 +125,6 @@ struct PlanDiagnosisView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Button("プランを変更…", action: onOpenSettings)
-                .controlSize(.small)
         }
     }
 
