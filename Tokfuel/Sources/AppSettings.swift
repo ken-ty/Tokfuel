@@ -170,6 +170,16 @@ final class AppSettings: ObservableObject {
         didSet { persist(costModelBreakdownMode.rawValue, forKey: Keys.costModelBreakdownMode) }
     }
 
+    /// ベンダーごとに選んでいるプラン id（`PlanVendor.rawValue` → `SubscriptionPlan.id`）。
+    /// 未設定のベンダーは「契約なし（API 従量）」として扱う。
+    @Published var subscriptionPlanIDs: [String: String] {
+        didSet { persist(subscriptionPlanIDs, forKey: Keys.subscriptionPlanIDs) }
+    }
+    /// 「カスタム」枠を選んだときの月額 (USD)。`PlanVendor.rawValue` → 月額。
+    @Published var customPlanMonthlyUSD: [String: Double] {
+        didSet { persist(customPlanMonthlyUSD, forKey: Keys.customPlanMonthlyUSD) }
+    }
+
     /// retokのコスト集計とプロンプト数の読み取り元となるClaudeディレクトリ。
     @Published var claudeDirectory: String {
         didSet { persist(claudeDirectory, forKey: Keys.claudeDirectory) }
@@ -249,6 +259,8 @@ final class AppSettings: ObservableObject {
         static let budgetAlertStyle = "budgetAlertStyle"
         static let costSourceMode = "costSourceMode"
         static let costModelBreakdownMode = "costModelBreakdownMode"
+        static let subscriptionPlanIDs = "subscriptionPlanIDs"
+        static let customPlanMonthlyUSD = "customPlanMonthlyUSD"
         static let analyticsConsent = "analyticsConsent"
         static let analyticsConsentAnswered = "analyticsConsentAnswered"
     }
@@ -261,6 +273,47 @@ final class AppSettings: ObservableObject {
     var claudeDirectoryURL: URL {
         URL(fileURLWithPath: (claudeDirectory as NSString).expandingTildeInPath)
     }
+
+    // MARK: - サブスクのプラン
+
+    /// このベンダーで選んでいるプラン（未設定・未知の id は「契約なし」）。
+    func plan(for vendor: PlanVendor) -> SubscriptionPlan {
+        SubscriptionPlan.plan(id: subscriptionPlanIDs[vendor.rawValue] ?? "", vendor: vendor)
+    }
+
+    func setPlan(_ plan: SubscriptionPlan, for vendor: PlanVendor) {
+        subscriptionPlanIDs[vendor.rawValue] = plan.id
+    }
+
+    /// 「カスタム」枠に入れた月額 (USD)。
+    func customMonthly(for vendor: PlanVendor) -> Double {
+        customPlanMonthlyUSD[vendor.rawValue] ?? 0
+    }
+
+    func setCustomMonthly(_ usd: Double, for vendor: PlanVendor) {
+        customPlanMonthlyUSD[vendor.rawValue] = max(0, usd)
+    }
+
+    /// このベンダーに実際に払っている月額 (USD)。カスタム枠なら入力値、契約なしなら 0。
+    func monthlyPlanCost(for vendor: PlanVendor) -> Double {
+        let plan = plan(for: vendor)
+        return plan.isCustom ? customMonthly(for: vendor) : plan.monthlyUSD
+    }
+
+    /// 表示中のコストソースに含まれるベンダー。「Claude のみ」なら Claude だけを比較に載せる
+    /// ——見えていない支出を勝手に足すと、ヒーローの金額と比較の分母が食い違う。
+    var comparablePlanVendors: [PlanVendor] {
+        PlanVendor.allCases.filter { costSourceMode.includes(sourceID: $0.sourceID) }
+    }
+
+    /// 表示中のソースぶんの定額の合計 (USD/月)。
+    var subscriptionMonthlyTotal: Double {
+        comparablePlanVendors.reduce(0) { $0 + monthlyPlanCost(for: $1) }
+    }
+
+    /// 定額を 1 つでも登録しているか。していなければ比較の片側が無いので、
+    /// ポップオーバーは金額ではなく登録への導線を出す。
+    var hasAnySubscription: Bool { subscriptionMonthlyTotal > 0 }
 
     /// 月側の集計に実際に使う期間。予算オフでメニューバー表示のためだけに数える場合は暦月。
     var effectiveBudgetPeriod: BudgetPeriod {
@@ -319,6 +372,10 @@ final class AppSettings: ObservableObject {
             codexInstalled: codexInstalled)
         costModelBreakdownMode = CostModelBreakdownMode(
             rawValue: defaults.string(forKey: Keys.costModelBreakdownMode) ?? "") ?? .combined
+        subscriptionPlanIDs = defaults.dictionary(forKey: Keys.subscriptionPlanIDs)
+            as? [String: String] ?? [:]
+        customPlanMonthlyUSD = defaults.dictionary(forKey: Keys.customPlanMonthlyUSD)
+            as? [String: Double] ?? [:]
         claudeDirectory = defaults.string(forKey: Keys.claudeDirectory) ?? Self.defaultClaudeDirectory
         budgetLimit = defaults.double(forKey: Keys.budgetLimit)
         dailyBudgetLimit = defaults.double(forKey: Keys.dailyBudgetLimit)

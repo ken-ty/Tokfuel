@@ -826,6 +826,12 @@ extension UsageStore {
     /// 期間合計（チャート下のキャプション用）。ソース表示モードに従う。
     /// Claude / 二次ソースとも表示窓に絞る（retok の余剰日や予算窓の補完分を数えない）。
     func periodTotalCost(for report: RetokReport) -> Double {
+        Self.displayedSpend(bySource: periodCostBySource(for: report),
+                            mode: settings.costSourceMode)
+    }
+
+    /// 表示窓のコストをソース id 別に返す（`periodTotalCost` が合成する前の内訳）。
+    func periodCostBySource(for report: RetokReport) -> [String: Double] {
         let from = Self.reportWindowStart(days: report.periodDays)
         var bySource = [
             CostSourceMode.claudeSourceID: report.daily
@@ -835,7 +841,32 @@ extension UsageStore {
         for (id, byDate) in driverDailyByID {
             bySource[id] = byDate.filter { $0.key >= from }.values.reduce(0, +)
         }
-        return Self.displayedSpend(bySource: bySource, mode: settings.costSourceMode)
+        return bySource
+    }
+
+    // MARK: - サブスクとの比較
+
+    /// 「サブスク vs API 換算」と診断の入力。
+    ///
+    /// 月換算の元は予算窓（32 日集計）ではなく**表示中の期間**にする。予算窓は予算を
+    /// 設定した人にしか回らない（`reloadBudget` が早期 return する）ので、そちらを土台に
+    /// すると予算オフの人には常に $0 が出てしまう。表示中の期間なら必ず載っている。
+    func planDiagnosisInput(for report: RetokReport) -> PlanDiagnosis.Input {
+        let bySource = periodCostBySource(for: report)
+        let days = max(report.periodDays, 1)
+        let vendors = settings.comparablePlanVendors.map { vendor in
+            PlanDiagnosis.VendorInput(
+                vendor: vendor,
+                monthlyAPIEquivalentUSD: PlanDiagnosis.monthlyEquivalent(
+                    spend: bySource[vendor.sourceID] ?? 0, windowDays: days),
+                currentPlan: settings.plan(for: vendor),
+                currentMonthlyUSD: settings.monthlyPlanCost(for: vendor))
+        }
+        // 使ってもいないし契約もしていないベンダーは載せない（$0 対 $0 の行が並ぶだけで、
+        // 判断の材料にならない）。
+        .filter { $0.monthlyAPIEquivalentUSD > 0 || $0.currentMonthlyUSD > 0 }
+        return PlanDiagnosis.Input(vendors: vendors, windowDays: days,
+                                   windowLabel: reportPeriod.label)
     }
 
     /// 「モデル別」セクション用の行。ソースフィルタと内訳モードに従う。

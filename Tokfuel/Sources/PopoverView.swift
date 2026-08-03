@@ -19,14 +19,22 @@ struct PopoverView: View {
         settings: AppSettings = .shared,
         updater: UpdateChecker = .shared,
         onOpenSettings: @escaping () -> Void = {},
-        onOpenAbout: @escaping () -> Void = {}
+        onOpenAbout: @escaping () -> Void = {},
+        initiallyShowsDiagnosis: Bool = false
     ) {
         self.store = store
         self.settings = settings
         self.updater = updater
         self.onOpenSettings = onOpenSettings
         self.onOpenAbout = onOpenAbout
+        // UI プレビュー撮影用（SettingsView の initiallyShowsAdvanced と同じ入口）。
+        // 通常の起動では常に false で、診断はボタンを押したときだけ開く。
+        self._showsDiagnosis = State(initialValue: initiallyShowsDiagnosis)
     }
+
+    /// 診断を開いているか。ポップオーバー自身の上に重ねる（`.sheet` は NSPopover の
+    /// ウィンドウ上では扱いが安定しないので、同じ見た目を重ねで作る）。
+    @State private var showsDiagnosis = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,6 +42,7 @@ struct PopoverView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     heroSection
                     budgetSection
+                    subscriptionSection
                     if let report = store.report {
                         chartSection(report)
                         modelBreakdown(report)
@@ -53,6 +62,18 @@ struct PopoverView: View {
             footerBar
         }
         .frame(width: 360, height: 520)
+        .overlay {
+            if showsDiagnosis {
+                PlanDiagnosisView(
+                    result: diagnosisResult,
+                    onClose: { withAnimation(.easeInOut(duration: 0.15)) { showsDiagnosis = false } },
+                    onOpenSettings: {
+                        showsDiagnosis = false
+                        onOpenSettings()
+                    })
+                .transition(.opacity)
+            }
+        }
         .onAppear {
             UsageEventLog.shared.log(.tabOpen, meta: ["tab": "cost"])
             // サインインしに行ったあとの初回だけ、10 分の定期更新を待たずに拾い直す。
@@ -176,6 +197,102 @@ struct PopoverView: View {
                       level: store.budgetLevel ?? .ok,
                       warnPercent: settings.budgetWarnPercent)
         }
+    }
+
+    // MARK: - 2.5 サブスクと API 換算の比較
+
+    /// 画面の金額は「トークン量 × API 価格表」なので、そのまま「API 従量だったらいくらか」に
+    /// なっている。足りないのは実際に払っている定額の一辺だけで、それを登録すれば差が出せる。
+    ///
+    /// 比較は月あたりに揃える（定額は月額、実績は表示中の期間から月換算）。日次と月額を
+    /// 並べても倍率の意味が取れない。
+    @ViewBuilder
+    private var subscriptionSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                sectionHeader("サブスク")
+                Spacer()
+                Button("診断") {
+                    UsageEventLog.shared.log(.tabOpen, meta: ["tab": "diagnosis"])
+                    withAnimation(.easeInOut(duration: 0.15)) { showsDiagnosis = true }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            if settings.hasAnySubscription {
+                subscriptionComparison
+            } else {
+                // 片側が無いと比較にならない。金額の代わりに登録の入口だけを出す。
+                Text("契約中のプランを登録すると、API 従量との差が出せます。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("プランを登録…") { onOpenSettings() }
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    /// 定額 / API 換算 / 差の 3 行。
+    @ViewBuilder
+    private var subscriptionComparison: some View {
+        let subscription = settings.subscriptionMonthlyTotal
+        let apiEquivalent = diagnosisResult.apiOnlyMonthlyTotal
+        HStack {
+            Text(planSummaryLabel)
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 8)
+            Text(Self.money(subscription) + "/月")
+                .font(.caption.monospacedDigit())
+        }
+        HStack {
+            Text("API 換算（\(store.reportPeriod.label)の実績から月換算）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 8)
+            Text(Self.money(apiEquivalent) + "/月")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        // メーターは「API 換算のうち、実際に払っている割合」。短いほど得をしている。
+        MeterBar(fraction: apiEquivalent > 0 ? subscription / apiEquivalent : 1,
+                 color: .secondary.opacity(0.45))
+        Text(Self.savingCaption(subscription: subscription, apiEquivalent: apiEquivalent))
+            .font(.caption)
+            .foregroundStyle(apiEquivalent > subscription ? Color.accentColor : Color.secondary)
+            .monospacedDigit()
+    }
+
+    /// 登録中のプランを 1 行にまとめたラベル（「Claude Max 20x · Cursor Pro」）。
+    private var planSummaryLabel: String {
+        let names = settings.comparablePlanVendors
+            .filter { settings.monthlyPlanCost(for: $0) > 0 }
+            .map { "\($0.label) \(settings.plan(for: $0).name)" }
+        return names.isEmpty ? "契約なし" : names.joined(separator: " · ")
+    }
+
+    /// 差額と倍率の 1 行。API 換算が定額を下回っているなら、得ではないことを言い切る。
+    static func savingCaption(subscription: Double, apiEquivalent: Double) -> String {
+        guard subscription > 0 else { return "定額の登録がありません" }
+        guard apiEquivalent > 0 else { return "実績がまだありません" }
+        if apiEquivalent <= subscription {
+            return "API 従量の方が \(money(subscription - apiEquivalent)) 安い計算です"
+        }
+        let ratio = apiEquivalent / subscription
+        return String(format: "%.1f 倍お得", ratio)
+            + "（月 \(money(apiEquivalent - subscription)) ぶん）"
+    }
+
+    /// 比較と診断が共有する判定結果。レポート未取得のときは空（比較行も出さない）。
+    private var diagnosisResult: PlanDiagnosis.Result {
+        guard let report = store.report else {
+            return PlanDiagnosis.diagnose(PlanDiagnosis.Input())
+        }
+        return PlanDiagnosis.diagnose(store.planDiagnosisInput(for: report))
     }
 
     // MARK: - 3. 傾向と内訳

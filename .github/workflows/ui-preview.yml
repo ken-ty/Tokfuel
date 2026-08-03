@@ -67,13 +67,14 @@ jobs:
               settings) echo "設定" ;;
               settings-advanced) echo "設定 - 「詳細」を開いた状態" ;;
               settings-debug) echo "設定 - 「デバッグ」を開いた状態" ;;
+              plan-diagnosis) echo "診断（サブスクと API 換算の比較・推奨構成）" ;;
               about) echo "About" ;;
               budget-alert) echo "予算アラートのウィンドウ" ;;
               analytics-consent) echo "初回 Analytics 同意ダイアログ" ;;
               *) echo "$1" ;;
             esac
           }
-          ORDER=(popover popover-update popover-cursor-degraded popover-cursor-signin popover-sessions popover-advice settings settings-advanced settings-debug about budget-alert analytics-consent)
+          ORDER=(popover popover-update popover-cursor-degraded popover-cursor-signin popover-sessions popover-advice settings settings-advanced settings-debug plan-diagnosis about budget-alert analytics-consent)
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

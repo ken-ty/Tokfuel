@@ -133,6 +133,8 @@ enum ScreenshotRenderer {
     ///   最初の 1 画面に入らないため、ここでしか見えない）
     /// - `settings` / `settings-advanced` / `settings-debug`: 設定ウィンドウ（既定・詳細を開いた状態・
     ///   デバッグを開いた状態）
+    /// - `plan-diagnosis`: ポップオーバーの上に「診断」を開いた状態（サブスクと API 換算の
+    ///   比較・推奨構成）
     /// - `about`: 「Tokfuel について」ウィンドウ
     /// - `budget-alert`: 予算アラートのウィンドウ（TF #81。ライブな `UsageStore` は通さず、
     ///   `budgetAlertContent` のフィクスチャだけを描く）
@@ -166,6 +168,9 @@ enum ScreenshotRenderer {
             ("settings-debug", try renderStandalone(
                 SettingsView(store: store, initiallyShowsAdvanced: true, initiallyShowsDebug: true),
                 probeSize: settingsSize, scrollsToBottom: true)),
+            ("plan-diagnosis", try renderStandalone(
+                PopoverView(store: store, initiallyShowsDiagnosis: true),
+                probeSize: popoverSize)),
             ("about", try renderStandalone(AboutView(), probeSize: aboutProbeSize)),
             ("budget-alert", try renderStandalone(BudgetAlertView(content: budgetAlertContent),
                                                   probeSize: alertProbeSize)),
@@ -306,6 +311,10 @@ enum ScreenshotRenderer {
         settings.budgetAlertStyle = .notification
         // 並べて表示にして、TF-0032 の Cursor 二次ソースをヒーローに写す。
         settings.costSourceMode = .sideBySide
+        // 契約中のプランを積んで、「サブスク」セクションを比較が出た状態で写す
+        // （未登録だと登録への導線しか出ず、この機能の絵にならない）。
+        settings.setPlan(SubscriptionPlan.plan(id: "claude.max20", vendor: .claude), for: .claude)
+        settings.setPlan(SubscriptionPlan.plan(id: "cursor.pro", vendor: .cursor), for: .cursor)
         // 追従モードのトグル（TF-0080）。実行環境の UserDefaults に依らず既定オンの絵にする。
         settings.adaptiveRefreshEnabled = true
         settings.activityAnimationEnabled = true
