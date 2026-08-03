@@ -381,8 +381,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.image = MenuBarImage.statusItem(for: content,
                                                glowPhase: animates ? glowPhase : nil)
         // アイコンと数字がくっつくので 1 文字ぶん空ける。
-        button.title = content.title.isEmpty ? "" : " " + content.title
-        button.toolTip = content.toolTip
+        let readout = content.title.isEmpty ? "" : " " + content.title
+        // リリース版と並べて常駐させたとき、どちらのゲージか分かるようにする。
+        button.title = BuildVariant.isDevelopment ? " DEV" + readout : readout
+        button.toolTip = BuildVariant.isDevelopment
+            ? "Tokfuel Dev — " + content.toolTip
+            : content.toolTip
     }
 
     @objc private func togglePopover() {

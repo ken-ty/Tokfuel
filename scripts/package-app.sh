@@ -2,21 +2,41 @@
 
 # SwiftPMの成果物からTokfuel.appを組み立てる共通処理。
 # 呼び出し元はset -euo pipefailを設定し、必要なら事前に出力先を削除する。
+#
+# 引数:
+#   $1 build_dir   SwiftPMの成果物ディレクトリ（.build/release など）
+#   $2 app_dir     出力する .app のパス
+#   $3 project_dir リポジトリのルート
+#   $4 app_name    バンドルの表示名（省略時は Tokfuel）
+#   $5 bundle_id   CFBundleIdentifier（省略時は Info.plist の値のまま）
+#
+# $4 / $5 を渡すと、リリース版と同時にインストールできる開発用バンドルになる。
+# 実行ファイル名も表示名に合わせるので、pkill や アクティビティモニタで見分けられる。
 package_tokfuel_app() {
   local build_dir="$1"
   local app_dir="$2"
   local project_dir="$3"
-  local app_name="Tokfuel"
+  local app_name="${4:-Tokfuel}"
+  local bundle_id="${5:-}"
+  local product_name="Tokfuel"
 
   mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
-  cp "$build_dir/$app_name" "$app_dir/Contents/MacOS/$app_name"
+  cp "$build_dir/$product_name" "$app_dir/Contents/MacOS/$app_name"
   cp "$project_dir/Info.plist" "$app_dir/Contents/Info.plist"
-  cp -R "$build_dir/${app_name}_${app_name}.bundle" "$app_dir/Contents/Resources/"
+  cp -R "$build_dir/${product_name}_${product_name}.bundle" "$app_dir/Contents/Resources/"
   cp "$project_dir/assets/AppIcon.icns" "$app_dir/Contents/Resources/AppIcon.icns"
   # Firebase は Bundle.main（Contents/Resources）から GoogleService-Info.plist を探す。
   # SPM のリソースバンドル内だけでは見つからないため、アプリバンドル直下にも置く。
   cp "$project_dir/Tokfuel/Sources/Resources/GoogleService-Info.plist" \
     "$app_dir/Contents/Resources/GoogleService-Info.plist"
+
+  local plist="$app_dir/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $app_name" "$plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name" "$plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$plist"
+  if [[ -n "$bundle_id" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_id" "$plist"
+  fi
 }
 
 # Crashlytics のシンボルアップロード（#22）。release.sh から呼ぶ。
