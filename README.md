@@ -43,6 +43,7 @@
   estimate otherwise, per-model breakdown, top sessions, and saving tips — retok's
   Claude analysis plus Cursor-derived ones (model skew, models missing from the price
   table, Cursor's share of the period), each badged with the source it came from.
+  Expand a tip to copy a ready-to-paste prompt that asks Claude how to act on it.
 
 - 🖱️ **Cursor, too**
 
@@ -50,7 +51,12 @@
   same total and chart via Cursor's own dashboard API (using the session Cursor already
   keeps on disk — nothing to paste). Offline or signed-out, it falls back to local
   token snapshots (often a lower bound on Cursor 3.x) and the popover says so, so a $0
-  Cursor figure is never mistaken for "I didn't use it". If the reason is an expired
+  Cursor figure is never mistaken for "I didn't use it". Usage that your plan covers —
+  the rows whose Cost column reads "-" on Cursor's own dashboard — is billed at nothing,
+  so it is not added to the total. Events that carry no readable cost field are priced
+  from Cursor's published price table instead, the same way the local path is; a model
+  the table doesn't list stays at $0 rather than getting a made-up rate. If the reason
+  is an expired
   sign-in, the popover offers a button that brings Cursor to the front — you sign in there,
   in Cursor's own UI, and Tokfuel picks the new session up. Pricing for the fallback path is
   refreshed once a day from Cursor's published price table.
@@ -105,6 +111,11 @@
   network requests. Both the faster refresh and the pulse can be turned off in Settings,
   and the pulse also stops in Low Power Mode or with Reduce Motion enabled.
 
+- 🎨 **Appearance**
+
+  In Settings, choose System / Light / Dark for the popover, Settings, and About.
+  System follows macOS Appearance.
+
 - 💱 **USD or JPY**
 
   Budgets and all amounts switch currency.
@@ -112,7 +123,7 @@
 
 - 🔄 **In-app updates**
 
-  At launch and then every 24 hours, the app checks
+  At launch and then every hour, the app checks
   [GitHub Releases](https://github.com/akidon0000/Tokfuel/releases) for a newer version
   and shows an **Update** button next to the popover's ⋯ menu. One click downloads the
   release, verifies its code signature, swaps the app in place, and relaunches.
@@ -121,7 +132,7 @@
 
   Prompts and transcripts never leave your Mac. Network calls are: the opt-in
   exchange-rate fetch; the update check against GitHub Releases at launch and every
-  24 hours (the release file downloads only when you click update); if Cursor is
+  hour (the release file downloads only when you click update); if Cursor is
   installed, the daily price-table refresh; when signed into Cursor, a usage query to
   Cursor's dashboard API (auth + date range only — no prompts); on **distribution
   builds**, Crashlytics crash reports (no consent prompt); and, only if you opt in,
@@ -176,6 +187,13 @@ PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
                     <img src="https://avatars.githubusercontent.com/u/81838716?v=4&s=100" width="100;" alt="ParkJong-Hun"/>
                     <br />
                     <sub><b>ParkJong-Hun</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/ken-ty">
+                    <img src="https://avatars.githubusercontent.com/u/38717219?v=4&s=100" width="100;" alt="ken-ty"/>
+                    <br />
+                    <sub><b>ken-ty</b></sub>
                 </a>
             </td>
 		</tr>
